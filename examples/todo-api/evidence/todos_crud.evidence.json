@@ -1,0 +1,84 @@
+{
+  "tool": "formal-verification/fv-run",
+  "model": "examples/todo-api/todos_crud.qnt",
+  "main": null,
+  "startedAt": "2026-10-29T23:27:08.601Z",
+  "finishedAt": "2026-10-29T23:27:17.916Z",
+  "quintExpected": "0.33.1",
+  "quintActual": "0.33.1",
+  "setupError": null,
+  "gates": [
+    {
+      "gate": "parse",
+      "ok": true,
+      "detail": {
+        "command": "quint parse C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt",
+        "exit": 0,
+        "timedOut": false,
+        "outputTail": ""
+      }
+    },
+    {
+      "gate": "typecheck",
+      "ok": true,
+      "detail": {
+        "command": "quint typecheck C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt",
+        "exit": 0,
+        "timedOut": false,
+        "outputTail": ""
+      }
+    },
+    {
+      "gate": "simulate",
+      "ok": true,
+      "detail": {
+        "command": "quint run C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt --max-samples 200 --max-steps 25 --seed 1 --invariants ownerIsolation --invariants errorsCarryNoPartialState",
+        "exit": 0,
+        "timedOut": false,
+        "outputTail": "  receipts: Set(\"k1\", \"k2\"),\n  todos: Map(\"t1\" -> \"write report\", \"t2\" -> \"\")\n}\n\n[State 24]\n{\n  lastCode: 200,\n  owners: Map(\"t1\" -> \"u1\", \"t2\" -> \"\"),\n  receipts: Set(\"k1\", \"k2\"),\n  todos: Map(\"t1\" -> \"write report\", \"t2\" -> \"\")\n}\n\n[State 25]\n{\n  lastCode: 422,\n  owners: Map(\"t1\" -> \"u1\", \"t2\" -> \"\"),\n  receipts: Set(\"k1\", \"k2\"),\n  todos: Map(\"t1\" -> \"write report\", \"t2\" -> \"\")\n}\n\n[ok] No violation found (100ms at 2000 traces/second).\nTrace length statistics: max=26, min=26, average=26.00\nYou may increase --max-samples and --max-steps.\nUse --verbosity to produce more (or less) output.\nUse --seed=0x9b79 --backend=rust to reproduce."
+      }
+    },
+    {
+      "gate": "test",
+      "ok": true,
+      "detail": [
+        {
+          "test": "createThenReplayKeepsOne",
+          "ok": true,
+          "detail": {
+            "command": "quint test C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt --match ^createThenReplayKeepsOne$ --seed 1",
+            "exit": 0,
+            "timedOut": false,
+            "outputTail": "todos_crud\n    ok createThenReplayKeepsOne passed 1 test(s)\n\n  1 passing (42ms)"
+          }
+        },
+        {
+          "test": "invalidLeavesStore",
+          "ok": true,
+          "detail": {
+            "command": "quint test C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt --match ^invalidLeavesStore$ --seed 1",
+            "exit": 0,
+            "timedOut": false,
+            "outputTail": "todos_crud\n    ok invalidLeavesStore passed 1 test(s)\n\n  1 passing (53ms)"
+          }
+        },
+        {
+          "test": "unauthorizedLeavesStore",
+          "ok": true,
+          "detail": {
+            "command": "quint test C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt --match ^unauthorizedLeavesStore$ --seed 1",
+            "exit": 0,
+            "timedOut": false,
+            "outputTail": "todos_crud\n    ok unauthorizedLeavesStore passed 1 test(s)\n\n  1 passing (38ms)"
+          }
+        }
+      ]
+    },
+    {
+      "gate": "verify",
+      "ok": true,
+      "detail": "skipped by flag"
+    }
+  ],
+  "verdict": "PASS"
+}

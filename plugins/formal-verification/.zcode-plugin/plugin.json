@@ -1,0 +1,8 @@
+{
+  "name": "formal-verification",
+  "version": "0.1.0",
+  "description": "Exhaustive backend verification harness powered by Quint: model, simulate, test, and verify databases, distributed systems, APIs, auth, concurrency, jobs, and recovery",
+  "author": { "name": "formal-verification" },
+  "skills": "./skills",
+  "commands": "./commands"
+}
