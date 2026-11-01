@@ -1,8 +1,10 @@
 {
   "name": "formal-verification",
-  "version": "0.1.0",
-  "description": "Exhaustive backend verification harness powered by Quint: model, simulate, test, and verify databases, distributed systems, APIs, auth, concurrency, jobs, and recovery",
-  "author": { "name": "formal-verification" },
+  "version": "0.2.0",
+  "description": "Universal backend assurance harness powered by Quint: claim-graph modeling, simulation, bounded verification (resource-gated), mutation adequacy, live security probes, trace conformance, fault planning, discovery, scan fusion, coverage, assurance-case export, and self-qualification. No naked verdicts.",
+  "author": {
+    "name": "formal-verification"
+  },
   "skills": "./skills",
   "commands": "./commands"
 }

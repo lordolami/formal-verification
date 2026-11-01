@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "pack": "multi-tenant-saas",
+  "description": "Claim set for multi-tenant B2B SaaS / AI-agent platforms: isolation and authorization semantics first — the classes pattern tools cannot test. Adopt claims individually with fv-claims add; this file documents the recommended set and ordering.",
+  "adoptInOrder": ["CLM-ISO-001", "CLM-AUTHZ-004", "CLM-AUTHZ-001", "CLM-AUTHZ-009", "CLM-AUTHZ-006", "CLM-AUTHZ-005", "CLM-ISO-002", "CLM-ISO-003", "CLM-ISO-005", "CLM-ISO-006", "CLM-ISO-004", "CLM-AUTHZ-002", "CLM-AUTHZ-003"],
+  "notes": [
+    "Start with the hyper claims (ISO-001, AUTHZ-004): they require differential probe evidence, so wire fv-probe's dual-tenant campaign first.",
+    "AUTHZ-009 (context before auth) is the choke most multi-app backends get wrong; model it with tenant_isolation's hint adversary."
+  ]
+}

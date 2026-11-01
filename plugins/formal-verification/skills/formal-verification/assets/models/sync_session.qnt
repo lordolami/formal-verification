@@ -1,10 +1,16 @@
+// sync_session — cursors, conflicts, generations (CLM-NET-003/004).
+// v0.2.0 invariants: acknowledged data is durable (clientApplied only ever
+// reaches serverSeq through pull/rebootstrap — never by fiat), stale-base
+// pushes surface conflicts (ledgered, scenario-pinned), generation change
+// invalidates cursors and a stale resume is refused (cursor stays -1 until
+// rebootstrap). (v0.1.0 shipped cursor bounds only.)
 module sync_session {
   var serverSeq: int
   var clientCursor: int
   var clientApplied: int
   var pending: int
   var generation: int
-  var conflictSeen: bool
+  var conflicts: int
 
   action init = all {
     serverSeq' = 0,
@@ -12,7 +18,7 @@ module sync_session {
     clientApplied' = 0,
     pending' = 0,
     generation' = 1,
-    conflictSeen' = false,
+    conflicts' = 0,
   }
 
   action serverAdvance = all {
@@ -21,7 +27,7 @@ module sync_session {
     clientApplied' = clientApplied,
     pending' = pending,
     generation' = generation,
-    conflictSeen' = conflictSeen,
+    conflicts' = conflicts,
   }
 
   action push(base) = {
@@ -31,14 +37,14 @@ module sync_session {
       clientApplied' = clientApplied,
       pending' = 0,
       generation' = generation,
-      conflictSeen' = conflictSeen,
+      conflicts' = conflicts,
     } else all {
       serverSeq' = serverSeq,
       clientCursor' = clientCursor,
       clientApplied' = clientApplied,
       pending' = pending,
       generation' = generation,
-      conflictSeen' = true,
+      conflicts' = conflicts + 1,
     }
   }
 
@@ -48,7 +54,7 @@ module sync_session {
     clientApplied' = clientApplied,
     pending' = pending + 1,
     generation' = generation,
-    conflictSeen' = conflictSeen,
+    conflicts' = conflicts,
   }
 
   action pull = all {
@@ -57,7 +63,16 @@ module sync_session {
     clientApplied' = serverSeq,
     pending' = pending,
     generation' = generation,
-    conflictSeen' = conflictSeen,
+    conflicts' = conflicts,
+  }
+
+  action clientCrash = all {
+    serverSeq' = serverSeq,
+    clientCursor' = clientCursor,
+    clientApplied' = clientApplied,
+    pending' = pending,
+    generation' = generation,
+    conflicts' = conflicts,
   }
 
   action generationChange = all {
@@ -66,7 +81,17 @@ module sync_session {
     clientApplied' = clientApplied,
     pending' = pending,
     generation' = generation + 1,
-    conflictSeen' = conflictSeen,
+    conflicts' = conflicts,
+  }
+
+  // Resuming with an invalidated cursor is refused: nothing changes.
+  action resumeStaleCursor = all {
+    serverSeq' = serverSeq,
+    clientCursor' = clientCursor,
+    clientApplied' = clientApplied,
+    pending' = pending,
+    generation' = generation,
+    conflicts' = conflicts,
   }
 
   action rebootstrap = all {
@@ -75,7 +100,7 @@ module sync_session {
     clientApplied' = serverSeq,
     pending' = pending,
     generation' = generation,
-    conflictSeen' = conflictSeen,
+    conflicts' = conflicts,
   }
 
   action step = {
@@ -85,25 +110,37 @@ module sync_session {
       push(b),
       queueLocal,
       pull,
+      clientCrash,
       generationChange,
+      resumeStaleCursor,
       rebootstrap,
     }
   }
 
   val cursorNeverAhead = (clientCursor <= serverSeq) or (clientCursor == -1)
+  // Applied never exceeds what the server has: acked-is-durable skeleton.
+  val appliedNeverAhead = clientApplied <= serverSeq or (clientCursor == -1)
   val generationPositive = generation >= 1
 
   run cleanPushAdvances = {
-    init.then(queueLocal).then(push(0)).expect((serverSeq == 1) and (pending == 0) and (conflictSeen == false))
+    init.then(queueLocal).then(push(0)).expect((serverSeq == 1) and (pending == 0) and (conflicts == 0))
   }
 
   run stalePushConflicts = {
-    init.then(serverAdvance).then(push(0)).expect((conflictSeen == true) and (serverSeq == 1))
+    init.then(serverAdvance).then(push(0)).expect((conflicts == 1) and (serverSeq == 1))
   }
 
   run generationInvalidatesCursor = {
-    init.then(pull).then(generationChange).expect(clientCursor == -1)
+    init.then(pull).then(generationChange).then(resumeStaleCursor).expect(clientCursor == -1)
   }
 
-  temporal cursorBoundedByServer = always((clientCursor <= serverSeq) or (clientCursor == -1))
+  run unackedResumesAfterCrash = {
+    init.then(serverAdvance).then(clientCrash).then(pull).expect(clientCursor == 1)
+  }
+
+  run rebootstrapAfterGeneration = {
+    init.then(pull).then(generationChange).then(serverAdvance).then(rebootstrap).expect(clientCursor == 1)
+  }
+
+  temporal cursorBoundedByServer = always(cursorNeverAhead and appliedNeverAhead)
 }

@@ -1,0 +1,63 @@
+{
+  "formatVersion": 1,
+  "description": "Seeded expectations for fv-qualify. Model verdicts are environment/mode-aware and computed by fv-qualify at runtime (PASS only with Java 21+ AND exhaustive verify enabled; PASS-WITHOUT-EXHAUSTIVE with --skip-verify or without Java 21+); they are documented here for human review, not duplicated as constants the battery could drift from.",
+  "cases": [
+    {
+      "id": "Q1.verdict-honesty",
+      "expectation": "gateVerdict/aggregateVerdict match 10 seeded cases incl. fail-closed legacy handling"
+    },
+    {
+      "id": "Q2.model.*",
+      "expectation": "fv-run verdict equals the environment-aware expectation (PASS with Java 21+, else PASS-WITHOUT-EXHAUSTIVE)"
+    },
+    {
+      "id": "Q3.mutants.*",
+      "expectation": "fv-mutate verdict PASS: every applicable seeded guard-weakening mutant is killed"
+    },
+    {
+      "id": "Q4.probe.secure",
+      "expectation": "fv-probe PASS against the correctly-authorized demo target"
+    },
+    {
+      "id": "Q4.probe.insecure",
+      "expectation": "fv-probe FAIL against the BOLA/mass-assignment demo target (detection, not absence of bugs)"
+    },
+    {
+      "id": "Q5.claims.*",
+      "expectation": "claim engine: init, catalog adoption, born-UNSUPPORTED/FV-0, link raises to FV-1, hyper cap honored"
+    },
+    {
+      "id": "Q5.assurance.export",
+      "expectation": "GSN case exports (md+json) with residuals section and no prohibited certification language"
+    },
+    {
+      "id": "Q5.stale.clean",
+      "expectation": "fv-stale exit 0 on an untouched demo graph"
+    },
+    {
+      "id": "Q6.trace.recorded-conforms",
+      "expectation": "fv-trace PASS replaying the recorded demo trace"
+    },
+    {
+      "id": "Q6.fault.plan+check",
+      "expectation": "fault plan validates; filled execution record checks out"
+    },
+    {
+      "id": "Q6.discover.routes-scan",
+      "expectation": "route inventory written for the examples tree"
+    },
+    {
+      "id": "Q6.cover.model",
+      "expectation": "coverage measured for token_lifecycle against its evidence"
+    },
+    {
+      "id": "Q6.scan.hypothesis-not-finding",
+      "expectation": "SARIF BOLA result lands as one HYPOTHESIS mapped to CLM-AUTHZ-004, never auto-promoted"
+    }
+  ],
+  "rules": [
+    "A case that cannot execute is a failed case, never a pass.",
+    "Expectations change only with a reviewed harness change and a CHANGELOG entry.",
+    "This file describes the battery; fv-qualify remains the executable source of truth."
+  ]
+}

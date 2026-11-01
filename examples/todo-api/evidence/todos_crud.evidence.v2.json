@@ -1,0 +1,113 @@
+{
+  "tool": "formal-verification/fv-run",
+  "formatVersion": 2,
+  "model": "C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt",
+  "main": null,
+  "startedAt": "2026-11-01T02:41:33.630Z",
+  "finishedAt": "2026-11-01T02:41:43.987Z",
+  "quintExpected": "0.33.1",
+  "quintActual": "0.33.1",
+  "setupError": null,
+  "provenance": {
+    "formatVersion": 2,
+    "model": "C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt",
+    "modelSha256": "d0855a6567ab3217fbe0223fba37c8b1559e60b398f68efb1792c5da9a1fbaf0",
+    "main": null,
+    "invariants": [
+      "ownerIsolation",
+      "errorsCarryNoPartialState"
+    ],
+    "temporals": [],
+    "seed": "1",
+    "budgets": {
+      "simulateMaxSamples": 200,
+      "simulateMaxSteps": 25,
+      "verifyMaxSteps": 10
+    },
+    "gitCommit": "4eb3ee41e2fd1b0ae9eab44d76c8b6e13a36f827",
+    "gitDirty": true,
+    "node": "v24.15.0",
+    "platform": "win32 x64",
+    "quintVersion": "0.33.1",
+    "java": "openjdk version \"17.0.19\" 2026-04-21"
+  },
+  "gates": [
+    {
+      "gate": "parse",
+      "ok": true,
+      "status": "passed",
+      "detail": {
+        "command": "quint parse C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt",
+        "exit": 0,
+        "timedOut": false,
+        "outputTail": ""
+      }
+    },
+    {
+      "gate": "typecheck",
+      "ok": true,
+      "status": "passed",
+      "detail": {
+        "command": "quint typecheck C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt",
+        "exit": 0,
+        "timedOut": false,
+        "outputTail": ""
+      }
+    },
+    {
+      "gate": "simulate",
+      "ok": true,
+      "status": "passed",
+      "detail": {
+        "command": "quint run C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt --max-samples 200 --max-steps 25 --seed 1 --invariants ownerIsolation --invariants errorsCarryNoPartialState",
+        "exit": 0,
+        "timedOut": false,
+        "outputTail": "  receipts: Set(\"k1\", \"k2\"),\n  todos: Map(\"t1\" -> \"write report\", \"t2\" -> \"\")\n}\n\n[State 24]\n{\n  lastCode: 200,\n  owners: Map(\"t1\" -> \"u1\", \"t2\" -> \"\"),\n  receipts: Set(\"k1\", \"k2\"),\n  todos: Map(\"t1\" -> \"write report\", \"t2\" -> \"\")\n}\n\n[State 25]\n{\n  lastCode: 422,\n  owners: Map(\"t1\" -> \"u1\", \"t2\" -> \"\"),\n  receipts: Set(\"k1\", \"k2\"),\n  todos: Map(\"t1\" -> \"write report\", \"t2\" -> \"\")\n}\n\n[ok] No violation found (88ms at 2273 traces/second).\nTrace length statistics: max=26, min=26, average=26.00\nYou may increase --max-samples and --max-steps.\nUse --verbosity to produce more (or less) output.\nUse --seed=0x9b79 --backend=rust to reproduce."
+      }
+    },
+    {
+      "gate": "test",
+      "ok": true,
+      "status": "passed",
+      "detail": [
+        {
+          "test": "createThenReplayKeepsOne",
+          "ok": true,
+          "detail": {
+            "command": "quint test C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt --match ^createThenReplayKeepsOne$ --seed 1",
+            "exit": 0,
+            "timedOut": false,
+            "outputTail": "todos_crud\n    ok createThenReplayKeepsOne passed 1 test(s)\n\n  1 passing (35ms)"
+          }
+        },
+        {
+          "test": "invalidLeavesStore",
+          "ok": true,
+          "detail": {
+            "command": "quint test C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt --match ^invalidLeavesStore$ --seed 1",
+            "exit": 0,
+            "timedOut": false,
+            "outputTail": "todos_crud\n    ok invalidLeavesStore passed 1 test(s)\n\n  1 passing (36ms)"
+          }
+        },
+        {
+          "test": "unauthorizedLeavesStore",
+          "ok": true,
+          "detail": {
+            "command": "quint test C:\\Users\\lakesbim\\Desktop\\formal-verification\\examples\\todo-api\\todos_crud.qnt --match ^unauthorizedLeavesStore$ --seed 1",
+            "exit": 0,
+            "timedOut": false,
+            "outputTail": "todos_crud\n    ok unauthorizedLeavesStore passed 1 test(s)\n\n  1 passing (35ms)"
+          }
+        }
+      ]
+    },
+    {
+      "gate": "verify",
+      "ok": true,
+      "status": "skipped-no-java21",
+      "detail": "exhaustive verification requires Java >= 21 (Apalache); detected: openjdk version \"17.0.19\" 2026-04-21. Correctness is tested, not proven."
+    }
+  ],
+  "verdict": "PASS-WITHOUT-EXHAUSTIVE"
+}

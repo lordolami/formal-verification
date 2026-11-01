@@ -16,14 +16,21 @@ This example shows what a finished `/formalverification` run looks like end to e
 
 ## 3. What the harness found
 
-Simulation of the first draft found a real bug shape: a duplicate `POST /todos` with the same idempotency key created a second row because the handler checked the key after inserting. Counterexample trace included the seed and the two-step reproduction (`create(k1)` then `create(k1)` → two rows). Fix: check-then-insert inside the same transaction. Re-ran all gates: PASS.
+Simulation of the first draft found a real bug shape: a duplicate `POST /todos` with the same idempotency key created a second row because the handler checked the key after inserting. Counterexample trace included the seed and the two-step reproduction (`create(k1)` then `create(k1)` → two rows). Fix: check-then-insert inside the same transaction. Re-ran all gates: clean.
 
 ## 4. Evidence and verdict
 
-`evidence/` holds the per-model evidence JSON from `fv-run.js`. The aggregate from `fv-report.js`:
+`evidence/` holds two records, and the difference between them is the v0.2.0 honesty contract in action:
 
-- `todos_crud`: parse ok, typecheck ok, simulate ok (200 samples / 25 steps, seed 1), 3 scenario tests ok, verify skipped-no-java21.
-- `token_lifecycle`: parse ok, typecheck ok, simulate ok, 2 scenario tests ok, verify skipped-no-java21.
-- **Verdict: PASS-WITHOUT-EXHAUSTIVE** — tested, not proven. The report states the bounds and the one environment gap (no Java 21 on the run machine).
+- `todos_crud.evidence.json` — **legacy (v0.1.0, formatVersion 1)**. It records `verify: "skipped by flag"` yet verdict `PASS` — the v0.1.0 verdict defect disclosed in `CHANGELOG.md`. It is retained unmodified as a defect artifact; `fv-report` labels it LEGACY. Do not trust it.
+- `todos_crud.evidence.v2.json` — **current (v0.2.0, formatVersion 2)**, generated on this machine (Node 24, Quint 0.33.1, Java 17): parse/typecheck/simulate/test passed, `verify: skipped-no-java21`, verdict **PASS-WITHOUT-EXHAUSTIVE** — tested, not proven, with model SHA-256, seed, budgets, and git commit recorded.
 
-Run it yourself: copy the skill's `scripts/fv-run.js` flow against `todos_crud.qnt` with `--invariants ownerIsolation --invariants errorsCarryNoPartialState --skip-verify --seed 1`.
+Run it yourself:
+
+```
+node plugins/formal-verification/skills/formal-verification/scripts/fv-run.js \
+  --model examples/todo-api/todos_crud.qnt --seed 1 \
+  --invariants ownerIsolation --invariants errorsCarryNoPartialState
+```
+
+Exit code 3 means PASS-WITHOUT-EXHAUSTIVE on a machine without Java 21+; with Java 21+ the same command runs the exhaustive gate and can reach PASS.

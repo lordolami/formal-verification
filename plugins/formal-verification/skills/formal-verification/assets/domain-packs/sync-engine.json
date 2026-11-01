@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "pack": "sync-engine",
+  "description": "Claim set for offline-first sync, replication, and CDC backends: cursor honesty, generation discipline, privileged replication, conflict surfacing.",
+  "adoptInOrder": ["CLM-NET-003", "CLM-NET-004", "CLM-INT-003", "CLM-NET-006", "CLM-NET-005", "CLM-NET-001", "CLM-NET-002", "CLM-INT-006"],
+  "notes": [
+    "Conflicts-never-silent lives in the sync_session starter (conflicts ledger); extend it with your merge/reject policy before claiming NET-003 at FV-3.",
+    "F11 (dependency successful-lie) is the fault point sync engines die on — fv-fault plans must include it explicitly."
+  ]
+}

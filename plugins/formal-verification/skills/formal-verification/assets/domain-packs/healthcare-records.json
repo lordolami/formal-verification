@@ -1,0 +1,11 @@
+{
+  "formatVersion": 1,
+  "pack": "healthcare-records",
+  "description": "Claim set for health-data backends (HIPAA-shaped expectations; this pack supports your conformity work — it confers no certification). Emphasis: minimum-necessary access, audit durability, retention/deletion discipline, secret hygiene.",
+  "adoptInOrder": ["CLM-AUTHZ-005", "CLM-AUTHZ-001", "CLM-ISO-001", "CLM-AUTHZ-004", "CLM-PLAT-005", "CLM-INT-001", "CLM-INT-005", "CLM-PLAT-002", "CLM-AUTHZ-002", "CLM-AUTHZ-010"],
+  "authorYourself": [
+    "Audit-log append-only: no actor (incl. operator) can rewrite history — requires storage-level control mapping.",
+    "Retention/deletion: expired records are cryptographically or physically erased on every replica/backup within the stated window — generation claims (INT-006) must be bound.",
+    "Break-glass access: emergency elevation is possible, alarmed, and retrospectively reviewable — step-up claims (AUTHZ-012) extended."
+  ]
+}

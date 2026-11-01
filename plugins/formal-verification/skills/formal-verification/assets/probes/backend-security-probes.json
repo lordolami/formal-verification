@@ -1,0 +1,68 @@
+{
+  "formatVersion": 1,
+  "name": "backend-security-probes",
+  "description": "Claim-linked HTTP security probes. Two actors on different tenants (alice@A, bob@B) plus anonymous. Tokens and base URL come from FV_PROBE_* environment variables — never commit real credentials. aliceObjectId/bobObjectId are objects owned by alice/bob respectively, used for BOLA swaps.",
+  "actors": {
+    "alice": { "tokenEnv": "FV_PROBE_ALICE_TOKEN", "objectEnv": "FV_PROBE_ALICE_OBJECT_ID" },
+    "bob": { "tokenEnv": "FV_PROBE_BOB_TOKEN", "objectEnv": "FV_PROBE_BOB_OBJECT_ID" }
+  },
+  "probes": [
+    {
+      "id": "ANON-001",
+      "claim": "CLM-AUTHZ-001",
+      "title": "anonymous cannot list protected collection",
+      "method": "GET",
+      "url": "/api/collections/items/records",
+      "actor": "anonymous",
+      "expect": { "deny": true }
+    },
+    {
+      "id": "BOLA-001",
+      "claim": "CLM-ISO-001",
+      "title": "bob cannot read alice's object by id (BOLA swap)",
+      "method": "GET",
+      "url": "/api/collections/items/records/{aliceObjectId}",
+      "actor": "bob",
+      "expect": { "deny": true }
+    },
+    {
+      "id": "BOLA-002",
+      "claim": "CLM-ISO-001",
+      "title": "alice can read her own object (positive control — harness must allow)",
+      "method": "GET",
+      "url": "/api/collections/items/records/{aliceObjectId}",
+      "actor": "alice",
+      "expect": { "allow": true }
+    },
+    {
+      "id": "ANON-002",
+      "claim": "CLM-AUTHZ-001",
+      "title": "anonymous cannot create records",
+      "method": "POST",
+      "url": "/api/collections/items/records",
+      "actor": "anonymous",
+      "json": { "title": "fv-probe-anon-create" },
+      "expect": { "deny": true }
+    },
+    {
+      "id": "MASS-001",
+      "claim": "CLM-AUTHZ-006",
+      "title": "mass assignment: owner field cannot be injected on create",
+      "method": "POST",
+      "url": "/api/collections/items/records",
+      "actor": "alice",
+      "json": { "title": "fv-probe-mass", "owner": "{bobObjectId}", "role": "admin", "tenant": "B" },
+      "expect": { "denyOrStrip": ["owner", "role", "tenant"] }
+    },
+    {
+      "id": "ORACLE-001",
+      "claim": "CLM-ISO-004",
+      "title": "existence oracle: foreign object vs nonexistent object error shape matches",
+      "oracle": {
+        "a": { "method": "GET", "url": "/api/collections/items/records/{aliceObjectId}", "actor": "bob" },
+        "b": { "method": "GET", "url": "/api/collections/items/records/fv-nonexistent-000000", "actor": "bob" }
+      },
+      "expect": { "sameErrorClass": true }
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "target": { "system": "demo-backend", "environment": "staging" },
+  "cases": [
+    {
+      "id": "KV-CRASH",
+      "claim": "CLM-INT-001",
+      "fpoints": ["F1", "F2", "F3"],
+      "boundary": "kv write/commit/ack sequence in the storage adapter",
+      "procedure": "staging-only chaos runner kills the worker at the named boundary (SIGKILL), restarts, and reads back the acknowledged key set",
+      "expect": "every acknowledged write readable after recovery; zero staged writes visible (CLM-INT-002 checked in the same pass)",
+      "safetyClass": "staging-destructive"
+    },
+    {
+      "id": "JOB-DUP",
+      "claim": "CLM-INT-003",
+      "fpoints": ["F4", "F2"],
+      "boundary": "job effect-commit vs queue ack",
+      "procedure": "broker redelivers each message 3x and the worker is killed between effect and ack; effect ledger is counted",
+      "expect": "effect ledger shows exactly one effect per logical job",
+      "safetyClass": "staging-destructive"
+    },
+    {
+      "id": "BACKUP-CORRUPT",
+      "claim": "CLM-INT-005",
+      "fpoints": ["F9", "F8"],
+      "boundary": "backup stage/publish and restore entry verification",
+      "procedure": "flip one byte in a staged archive entry; fill the staging volume during a second run; attempt restore",
+      "expect": "publish/restore refuses, naming the corrupt entry; live serving generation unchanged",
+      "safetyClass": "staging-destructive"
+    }
+  ]
+}

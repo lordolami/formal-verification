@@ -1,17 +1,34 @@
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
+  "harnessVersion": "0.2.0",
   "quintNpm": "@informalsystems/quint",
   "quintVersion": "0.33.1",
   "nodeEngines": ">=20",
   "javaForVerify": ">=21",
   "verifyBackendDefault": "apalache",
-  "verifyBackends": ["apalache", "tlc"],
+  "verifyBackends": [
+    "apalache",
+    "tlc"
+  ],
   "simulateBackendDefault": "rust",
-  "simulateBackends": ["rust", "typescript"],
+  "simulateBackends": [
+    "rust",
+    "typescript"
+  ],
   "defaultProfileBudgets": {
-    "simulation": { "maxSamples": 200, "maxSteps": 25, "timeoutSeconds": 300 },
-    "test": { "maxSamples": 100, "timeoutSeconds": 300 },
-    "verify": { "maxSteps": 10, "timeoutSeconds": 600 }
+    "simulation": {
+      "maxSamples": 200,
+      "maxSteps": 25,
+      "timeoutSeconds": 300
+    },
+    "test": {
+      "maxSamples": 100,
+      "timeoutSeconds": 300
+    },
+    "verify": {
+      "maxSteps": 10,
+      "timeoutSeconds": 600
+    }
   },
   "supportedDomains": [
     "api",
@@ -22,11 +39,27 @@
     "jobs",
     "sync",
     "files",
-    "recovery"
+    "recovery",
+    "security"
   ],
-  "gates": ["parse", "typecheck", "simulate", "test", "verify"],
+  "gates": [
+    "parse",
+    "typecheck",
+    "simulate",
+    "test",
+    "verify"
+  ],
+  "verdicts": [
+    "PASS",
+    "PASS-WITHOUT-EXHAUSTIVE",
+    "FAIL"
+  ],
   "evidenceDir": ".formal-verification/evidence",
   "modelsDir": ".formal-verification/models",
+  "probesDir": ".formal-verification/probes",
+  "claimsDir": ".formal-verification/claims",
+  "corpusDir": ".formal-verification/corpus",
   "quintTimeoutSeconds": 600,
+  "mutationKillThreshold": 0.8,
   "attribution": "Formal specifications are executed with Quint (https://github.com/quint-co/quint). Quint is a separate project by its own authors; this harness only drives its CLI and records the results."
 }

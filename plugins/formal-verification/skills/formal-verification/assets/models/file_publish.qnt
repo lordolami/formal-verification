@@ -1,66 +1,66 @@
+// file_publish — staged upload → finalize → protected serve → delete.
+// Claims: CLM-PLAT-001/002 + CLM-ISO-005 — unfinalized bytes never served,
+// protected objects and derivatives never served to unauthorized actors,
+// deleted objects never resurrect. `servedOk` only increments on a legitimate
+// serve; each scenario test pins a distinct violation shape, and fv-mutate
+// (dropping the protected check) must be killed by protectedDeniedAnon.
+// (v0.1.0 shipped set-size bounds. Fixed in v0.2.0.)
 module file_publish {
   var staged: Set[str]
   var finalized: Set[str]
+  var deleted: Set[str]
   var servedOk: int
-  var servedDenied: int
-  var protected: Set[str]
 
   pure val FILES = Set("f1", "f2")
 
   action init = all {
     staged' = Set(),
     finalized' = Set(),
+    deleted' = Set(),
     servedOk' = 0,
-    servedDenied' = 0,
-    protected' = Set("f1"),
   }
+
+  pure def isProtected(f) = f == "f1"
 
   action stage(f) = all {
     staged' = staged.union(Set(f)),
-    finalized' = finalized,
+    finalized' = finalized.exclude(Set(f)),
+    deleted' = deleted.exclude(Set(f)),
     servedOk' = servedOk,
-    servedDenied' = servedDenied,
-    protected' = protected,
   }
 
-  action finalize(f) = {
-    if (staged.contains(f)) all {
-      staged' = staged,
-      finalized' = finalized.union(Set(f)),
-      servedOk' = servedOk,
-      servedDenied' = servedDenied,
-      protected' = protected,
-    } else all {
-      staged' = staged,
-      finalized' = finalized,
-      servedOk' = servedOk,
-      servedDenied' = servedDenied,
-      protected' = protected,
-    }
+  action finalize(f) = all {
+    staged' = staged,
+    // A deleted (tombstoned) object cannot be re-finalized in place:
+    // re-publication requires a fresh stage, which clears the tombstone.
+    finalized' = if (staged.contains(f) and not(deleted.contains(f))) finalized.union(Set(f)) else finalized,
+    deleted' = deleted,
+    servedOk' = servedOk,
   }
 
+  // Serve guard: finalized AND not deleted AND (public OR authenticated).
   action serve(f, authed) = {
-    if (finalized.contains(f) and ((not(protected.contains(f))) or (authed))) all {
+    if (finalized.contains(f) and not(deleted.contains(f)) and ((not(isProtected(f))) or authed)) all {
       staged' = staged,
       finalized' = finalized,
+      deleted' = deleted,
       servedOk' = servedOk + 1,
-      servedDenied' = servedDenied,
-      protected' = protected,
     } else all {
       staged' = staged,
       finalized' = finalized,
+      deleted' = deleted,
       servedOk' = servedOk,
-      servedDenied' = servedDenied + 1,
-      protected' = protected,
     }
   }
+
+  // Derivative (thumbnail/preview) inherits the source's protection.
+  action serveDerivative(f, authed) = serve(f, authed)
 
   action deleteFile(f) = all {
     staged' = staged,
     finalized' = finalized.exclude(Set(f)),
+    deleted' = deleted.union(Set(f)),
     servedOk' = servedOk,
-    servedDenied' = servedDenied,
-    protected' = protected,
   }
 
   action step = {
@@ -70,23 +70,30 @@ module file_publish {
       stage(f),
       finalize(f),
       serve(f, a),
+      serveDerivative(f, a),
       deleteFile(f),
     }
   }
 
-  val stagedBounded = staged.size() <= 2
-  val finalizedBounded = finalized.size() <= 2
+  // Invariants: every finalized object was staged; deleted objects are
+  // never in the finalized set (so no serve can resurrect them).
+  val finalizeRequiresStage = finalized.exclude(staged).size() == 0
+  val deletedNeverFinalized = finalized.intersect(deleted).size() == 0
 
   run stageFinalizeServePublic = {
     init.then(stage("f2")).then(finalize("f2")).then(serve("f2", false)).expect(servedOk == 1)
   }
 
   run unfinalizedNeverServed = {
-    init.then(stage("f2")).then(serve("f2", false)).expect((servedOk == 0) and (servedDenied == 1))
+    init.then(stage("f2")).then(serve("f2", false)).expect(servedOk == 0)
   }
 
   run protectedDeniedAnon = {
-    init.then(stage("f1")).then(finalize("f1")).then(serve("f1", false)).expect((servedOk == 0) and (servedDenied == 1))
+    init.then(stage("f1")).then(finalize("f1")).then(serve("f1", false)).expect(servedOk == 0)
+  }
+
+  run protectedDerivativeDeniedAnon = {
+    init.then(stage("f1")).then(finalize("f1")).then(serveDerivative("f1", false)).expect(servedOk == 0)
   }
 
   run protectedServedAuthed = {
@@ -94,8 +101,8 @@ module file_publish {
   }
 
   run deletedNotServed = {
-    init.then(stage("f2")).then(finalize("f2")).then(deleteFile("f2")).then(serve("f2", false)).expect((servedOk == 0) and (servedDenied == 1))
+    init.then(stage("f2")).then(finalize("f2")).then(deleteFile("f2")).then(serve("f2", false)).expect(servedOk == 0)
   }
 
-  temporal setsStayBounded = always((staged.size() <= 2) and (finalized.size() <= 2))
+  temporal serveDiscipline = always(finalizeRequiresStage and deletedNeverFinalized)
 }

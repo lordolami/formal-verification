@@ -1,25 +1,31 @@
+// lease_lock — mutual exclusion with fencing tokens (CLM-NET-001 sibling).
+// A write is accepted only for the current holder presenting the current
+// fencing token; `acceptedWrites` is the observable ledger. The scenario
+// staleTokenWritesNothing plus the fencing guard give the property teeth:
+// fv-mutate rewrites the guard to `if (true)` in a copy and requires the
+// suite to kill that mutant. (v0.1.0 shipped holder-shape bounds only.)
 module lease_lock {
   var holder: str
   var fencing: int
-  var writes: int
+  var acceptedWrites: int
 
   pure val ACTORS = Set("w1", "w2")
 
   action init = all {
     holder' = "none",
     fencing' = 0,
-    writes' = 0,
+    acceptedWrites' = 0,
   }
 
   action acquire(a) = {
     if (holder == "none") all {
       holder' = a,
       fencing' = fencing + 1,
-      writes' = writes,
+      acceptedWrites' = acceptedWrites,
     } else all {
       holder' = holder,
       fencing' = fencing,
-      writes' = writes,
+      acceptedWrites' = acceptedWrites,
     }
   }
 
@@ -27,29 +33,29 @@ module lease_lock {
     if (holder == a) all {
       holder' = "none",
       fencing' = fencing,
-      writes' = writes,
+      acceptedWrites' = acceptedWrites,
     } else all {
       holder' = holder,
       fencing' = fencing,
-      writes' = writes,
+      acceptedWrites' = acceptedWrites,
     }
   }
 
   action expire = all {
     holder' = "none",
     fencing' = fencing,
-    writes' = writes,
+    acceptedWrites' = acceptedWrites,
   }
 
   action write(a, token) = {
     if ((holder == a) and (token == fencing)) all {
       holder' = holder,
       fencing' = fencing,
-      writes' = writes + 1,
+      acceptedWrites' = acceptedWrites + 1,
     } else all {
       holder' = holder,
       fencing' = fencing,
-      writes' = writes,
+      acceptedWrites' = acceptedWrites,
     }
   }
 
@@ -64,20 +70,24 @@ module lease_lock {
     }
   }
 
-  val singleHolder = (holder == "none") or (ACTORS.contains(holder))
-  val fencingMonotonic = fencing >= 0
+  val mutualExclusion = (holder == "none") or (ACTORS.contains(holder))
+  val fencingNonnegative = fencing >= 0
 
   run acquireWriteRelease = {
-    init.then(acquire("w1")).then(write("w1", 1)).then(release("w1")).expect((writes == 1) and (holder == "none"))
+    init.then(acquire("w1")).then(write("w1", 1)).then(release("w1")).expect((acceptedWrites == 1) and (holder == "none"))
   }
 
   run staleTokenWritesNothing = {
-    init.then(acquire("w1")).then(expire).then(acquire("w2")).then(write("w1", 1)).expect(writes == 0)
+    init.then(acquire("w1")).then(expire).then(acquire("w2")).then(write("w1", 1)).expect(acceptedWrites == 0)
+  }
+
+  run currentHolderWrongTokenWritesNothing = {
+    init.then(acquire("w1")).then(write("w1", 99)).expect(acceptedWrites == 0)
   }
 
   run doubleAcquireKeepsFirst = {
     init.then(acquire("w1")).then(acquire("w2")).expect(holder == "w1")
   }
 
-  temporal holderAlwaysValid = always((holder == "none") or (ACTORS.contains(holder)))
+  temporal holderAlwaysValid = always(mutualExclusion)
 }

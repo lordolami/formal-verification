@@ -1,0 +1,12 @@
+{
+  "formatVersion": 1,
+  "target": "probe-demo (recorded)",
+  "note": "Recorded observations from a live demo run; expectations derived from the todo/token model sequences (valid -> invalid -> unauthorized -> replay). Replayed offline by fv-trace; re-run live with --base for FV-3 evidence.",
+  "steps": [
+    { "name": "create-valid", "claim": "CLM-AUTHZ-006", "observed": { "status": 201, "body": "{\"id\":\"t1\"}" }, "expect": { "status": 201 } },
+    { "name": "replay-same-key", "claim": "CLM-INT-003", "observed": { "status": 200, "body": "{\"id\":\"t1\"}" }, "expect": { "status": 200 } },
+    { "name": "create-invalid", "observed": { "status": 422, "body": "{\"error\":\"validation\"}" }, "expect": { "status": 422 } },
+    { "name": "create-unauthorized", "claim": "CLM-AUTHZ-001", "observed": { "status": 401, "body": "{\"error\":\"unauthorized\"}" }, "expect": { "deny": true } },
+    { "name": "foreign-read-denied", "claim": "CLM-AUTHZ-004", "observed": { "status": 404, "body": "{\"error\":\"not found\"}" }, "expect": { "deny": true } }
+  ]
+}

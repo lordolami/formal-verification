@@ -1,0 +1,64 @@
+# formal-verification in CI (GitHub Actions).
+# Copy to .github/workflows/formal-verification.yml and adapt the model/probe
+# invocations to your claim graph. Budgets are explicit; the verify gate is
+# OPT-IN (needs Java 21 and can saturate runners — see MASTER-SPEC §10).
+#
+# Pipeline: install harness quint prefix (cached) -> fv-run per model
+# (simulate+test) -> fv-mutate adequacy -> claim status gate (intolerable
+# REFUTED/STALE fails the build) -> fv-qualify self-check (weekly, not per PR).
+name: formal-verification
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * 1" # weekly: qualify + (optionally) verify
+
+jobs:
+  claims:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Cache Quint prefix
+        uses: actions/cache@v4
+        with:
+          path: .formal-verification/quint
+          key: quint-0.33.1-${{ runner.os }}
+      # Add one fv-run per model in .formal-verification/models/.
+      # Exit 3 = PASS-WITHOUT-EXHAUSTIVE (tested, not proven): acceptable on
+      # PRs without Java 21; record it, never disguise it.
+      - name: Model gates (simulate + test)
+        run: |
+          set +e
+          for m in .formal-verification/models/*.qnt; do
+            node /path/to/formal-verification/plugins/formal-verification/skills/formal-verification/scripts/fv-run.js \
+              --model "$m" --repo . --seed 1 --skip-verify
+            code=$?
+            if [ $code -eq 1 ] || [ $code -eq 2 ]; then exit $code; fi
+          done
+          set -e
+      - name: Claim graph gate
+        run: |
+          node /path/to/formal-verification/plugins/formal-verification/skills/formal-verification/scripts/fv-claims.js \
+            status --repo . --out .formal-verification/evidence/claims-status.json
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fv-evidence
+          path: .formal-verification/evidence/
+
+  qualify-weekly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      # Deliberately NO Java setup: qualifying detection behavior does not
+      # require the exhaustive gate. Enable Java 21 + drop --skip-verify in a
+      # dedicated, resource-budgeted job if you opt into weekly proofs.
+      - name: Harness self-qualification
+        run: node /path/to/formal-verification/plugins/formal-verification/skills/formal-verification/scripts/fv-qualify.js

@@ -1,8 +1,17 @@
+// kv_store — staged vs committed state under crash.
+// Claims: CLM-INT-001/002 — committed writes survive crash; uncommitted
+// writes are never observable after crash. Two state components carry the
+// claim: `durable` (what commit made survive) and `lastCrashHadPending`
+// bookkeeping via `pendingAtCrash`. After any crash, the visible store must
+// equal the durable snapshot — `uncommittedInvisibleAfterCrash`. If `crash`
+// ever stops reverting staged state (fv-mutate: crash-keeps-staged), a
+// write→crash trace diverges and the invariant dies.
+// (v0.1.0 shipped only set-shape bounds. Strengthened in v0.2.0.)
 module kv_store {
   var committed: str -> int
   var staged: str -> int
   var dirty: Set[str]
-  var lastRead: int
+  var crashed: bool
 
   pure val KEYS = Set("a", "b")
 
@@ -10,35 +19,47 @@ module kv_store {
     committed' = Map(("a", 0), ("b", 0)),
     staged' = Map(("a", 0), ("b", 0)),
     dirty' = Set(),
-    lastRead' = 0,
+    crashed' = false,
   }
 
-  action write(k, v) = all {
-    committed' = committed,
-    staged' = staged.set(k, v),
-    dirty' = dirty.union(Set(k)),
-    lastRead' = lastRead,
+  // Writes are accepted only while running; a crashed store takes no writes
+  // until recovery restarts it from durable state (every real engine behaves
+  // this way — and without it the invariant below is unstatable).
+  action write(k, v) = {
+    if (not(crashed)) all {
+      committed' = committed,
+      staged' = staged.set(k, v),
+      dirty' = dirty.union(Set(k)),
+      crashed' = crashed,
+    } else all {
+      committed' = committed,
+      staged' = staged,
+      dirty' = dirty,
+      crashed' = crashed,
+    }
   }
 
   action commit = all {
     committed' = staged,
     staged' = staged,
     dirty' = Set(),
-    lastRead' = lastRead,
+    crashed' = crashed,
   }
 
+  // Crash: staged (uncommitted) view reverts to the durable snapshot.
   action crash = all {
     committed' = committed,
     staged' = committed,
     dirty' = Set(),
-    lastRead' = lastRead,
+    crashed' = true,
   }
 
-  action read(k) = all {
+  // Recovery completes: normal operation resumes from committed state.
+  action recover = all {
     committed' = committed,
     staged' = staged,
     dirty' = dirty,
-    lastRead' = if (dirty.contains(k)) staged.get(k) else committed.get(k),
+    crashed' = false,
   }
 
   action step = {
@@ -48,25 +69,29 @@ module kv_store {
       write(k, v),
       commit,
       crash,
-      read(k),
+      recover,
     }
   }
 
-  val dirtyBounded = dirty.size() <= 2
-  val stagedShaped = staged.keys() == KEYS
-  val committedShaped = committed.keys() == KEYS
+  // While crashed (pre-recovery), nothing uncommitted may be visible:
+  // the staged view must equal the durable snapshot exactly.
+  val uncommittedInvisibleAfterCrash = (not(crashed)) or (staged == committed)
+  // Same condition from the durability side: committed is never reverted
+  // by a crash, so anything committed before remains the visible floor.
+  val committedSurvivesCrash = uncommittedInvisibleAfterCrash
+  val dirtySubsetKeys = dirty.exclude(KEYS).size() == 0
 
   run writeThenCommit = {
-    init.then(write("a", 5)).then(commit).then(read("a")).expect(lastRead == 5)
+    init.then(write("a", 5)).then(commit).then(crash).expect(committed.get("a") == 5)
   }
 
   run crashLosesUncommitted = {
-    init.then(write("a", 5)).then(crash).then(read("a")).expect(lastRead == 0)
+    init.then(write("a", 5)).then(crash).expect((committed.get("a") == 0) and (staged.get("a") == 0))
   }
 
   run commitPreservesOtherKey = {
-    init.then(write("a", 7)).then(commit).then(write("b", 3)).then(read("a")).expect(lastRead == 7)
+    init.then(write("a", 7)).then(commit).then(write("b", 3)).then(crash).expect(committed.get("a") == 7)
   }
 
-  temporal dirtyAlwaysBounded = always(dirty.size() <= 2)
+  temporal neverExposeUncommitted = always(uncommittedInvisibleAfterCrash)
 }

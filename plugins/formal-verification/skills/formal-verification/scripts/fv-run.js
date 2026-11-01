@@ -4,11 +4,19 @@
 //                  [--invariants a --invariants b] [--temporal t]
 //                  [--simulate|--skip-simulate] [--test|--skip-test] [--verify|--skip-verify]
 //                  [--max-samples N] [--max-steps N] [--seed S] [--out <evidence.json>]
-// The script runs: ensure quint -> parse -> typecheck -> run -> test -> verify,
-// then writes a verdict record. Exit code 0 only when every enabled gate passes.
+//
+// Pipeline: ensure quint -> parse -> typecheck -> run (simulate) -> test -> verify.
+// Evidence format v2 (see MASTER-SPEC.md): provenance (model SHA-256, git commit,
+// engine versions, environment, seed, budgets) + per-gate { gate, ok, status, detail }.
+//
+// HONESTY CONTRACT (v0.2.0): verdict is PASS only when every gate ran and passed,
+// verify included. Skipped verify (by flag OR by missing Java 21+) caps the
+// verdict at PASS-WITHOUT-EXHAUSTIVE. Skipped simulate/test likewise cap it.
+// Exit code 0 only on PASS. Exit 3 on PASS-WITHOUT-EXHAUSTIVE. Exit 1 on FAIL.
+// Setup errors exit 2. Never claim "fully correct" on simulation alone.
 
 const lib = require("./lib/fv-lib");
-const { fs, path } = lib;
+const { fs, path, os } = lib;
 
 function parseArgs(argv) {
   const a = { invariants: [], temporals: [], simulate: true, test: true, verify: true };
@@ -49,101 +57,151 @@ function main() {
 
   const gates = [];
   const startedAt = lib.nowIso();
+  const seed = args.seed !== undefined ? String(args.seed) : "1";
+
+  // ---- provenance (collected before any gate runs; part of the evidence) ----
+  let modelSha256 = null;
+  try { modelSha256 = lib.sha256File(modelAbs); } catch { /* recorded as null */ }
+  const provenance = {
+    formatVersion: 2,
+    model: modelAbs,
+    modelSha256,
+    main: args.main || null,
+    invariants: args.invariants,
+    temporals: args.temporals,
+    seed,
+    budgets: {
+      simulateMaxSamples: args.maxSamples || budgets.simulation.maxSamples,
+      simulateMaxSteps: args.maxSteps || budgets.simulation.maxSteps,
+      verifyMaxSteps: budgets.verify.maxSteps,
+    },
+    gitCommit: lib.gitCommit(repo),
+    gitDirty: lib.gitDirty(repo),
+    node: process.version,
+    platform: `${os.platform()} ${os.arch()}`,
+  };
 
   let bin;
+  let quintActual = "not-installed";
   try {
     const inst = lib.ensureQuintInstalled(repo, cfg);
     bin = inst.bin;
+    quintActual = lib.quintVersion(bin);
   } catch (e) {
-    return finish({ quint: cfg.quintVersion, quintActual: "not-installed" }, gates, e.message);
+    return finish(provenance, gates, e.message, { quint: cfg.quintVersion, quintActual });
   }
-  const qv = lib.quintVersion(bin);
+  provenance.quintVersion = quintActual;
 
   const invFlags = [];
   for (const inv of args.invariants) invFlags.push("--invariants", inv);
   const maxSamples = String(args.maxSamples || budgets.simulation.maxSamples);
   const maxStepsSim = String(args.maxSteps || budgets.simulation.maxSteps);
-  const seedArgs = args.seed ? ["--seed", String(args.seed)] : [];
+  const seedArgs = ["--seed", seed];
 
+  // ---- gate 1: parse ----
   const p = lib.runQuintStage(bin, ["parse", modelAbs], { timeoutSeconds: 120 });
-  gates.push({ gate: "parse", ok: p.status === 0, detail: tail(p) });
-  if (p.status !== 0) return finish({ quint: cfg.quintVersion, quintActual: qv }, gates, null);
+  gates.push({ gate: "parse", ok: p.status === 0, status: p.status === 0 ? "passed" : "failed", detail: tail(p) });
+  if (p.status !== 0) return finish(provenance, gates, null, { quint: cfg.quintVersion, quintActual });
 
+  // ---- gate 2: typecheck ----
   const tcArgs = ["typecheck", modelAbs];
   if (args.main) tcArgs.push("--main", args.main);
   const tc = lib.runQuintStage(bin, tcArgs, { timeoutSeconds: 180 });
-  gates.push({ gate: "typecheck", ok: tc.status === 0, detail: tail(tc) });
-  if (tc.status !== 0) return finish({ quint: cfg.quintVersion, quintActual: qv }, gates, null);
+  gates.push({ gate: "typecheck", ok: tc.status === 0, status: tc.status === 0 ? "passed" : "failed", detail: tail(tc) });
+  if (tc.status !== 0) return finish(provenance, gates, null, { quint: cfg.quintVersion, quintActual });
 
+  // ---- gate 3: simulate ----
   if (args.simulate) {
     const runArgs = ["run", modelAbs, "--max-samples", maxSamples, "--max-steps", maxStepsSim, ...seedArgs];
     if (args.main) runArgs.push("--main", args.main);
     runArgs.push(...invFlags);
     const s = lib.runQuintStage(bin, runArgs, { timeoutSeconds: budgets.simulation.timeoutSeconds });
-    gates.push({ gate: "simulate", ok: s.status === 0, detail: tail(s) });
+    const ok = s.status === 0 && /\[ok\] No violation found/.test(`${s.stdout}\n${s.stderr}`);
+    gates.push({ gate: "simulate", ok, status: ok ? "passed" : "failed", detail: tail(s) });
+    if (!ok) return finish(provenance, gates, null, { quint: cfg.quintVersion, quintActual });
   } else {
-    gates.push({ gate: "simulate", ok: true, detail: "skipped by flag" });
+    gates.push({ gate: "simulate", ok: true, status: "skipped-by-flag", detail: "simulation skipped by --skip-simulate; verdict capped at PASS-WITHOUT-EXHAUSTIVE" });
   }
 
+  // ---- gate 4: test (each `run` case by anchored name; zero tests is FAIL) ----
   if (args.test) {
-    // NOTE: `quint test` with no --match discovers zero tests and passes vacuously
-    // in some builds. Extract `run NAME = {...}` test names and execute each with
-    // an anchored --match so a passing gate means tests actually ran.
     const names = listRunTests(modelAbs);
     if (!names.length) {
-      gates.push({ gate: "test", ok: false, detail: "no `run` tests found in model; refusing vacuous pass" });
-    } else {
-      let allOk = true;
-      const perTest = [];
-      for (const nm of names) {
-        const tArgs = ["test", modelAbs, "--match", `^${nm}$`, ...seedArgs];
-        if (args.main) tArgs.push("--main", args.main);
-        const t = lib.runQuintStage(bin, tArgs, { timeoutSeconds: budgets.test.timeoutSeconds });
-        const ok = t.status === 0 && /passing/.test(`${t.stdout}\n${t.stderr}`) && !/failed/.test(`${t.stdout}\n${t.stderr}`);
-        perTest.push({ test: nm, ok, detail: tail(t) });
-        if (!ok) allOk = false;
-      }
-      gates.push({ gate: "test", ok: allOk, detail: perTest });
+      gates.push({ gate: "test", ok: false, status: "failed", detail: "no `run` tests found in model; refusing vacuous pass" });
+      return finish(provenance, gates, null, { quint: cfg.quintVersion, quintActual });
     }
+    let allOk = true;
+    const perTest = [];
+    for (const nm of names) {
+      const tArgs = ["test", modelAbs, "--match", `^${nm}$`, ...seedArgs];
+      if (args.main) tArgs.push("--main", args.main);
+      const t = lib.runQuintStage(bin, tArgs, { timeoutSeconds: budgets.test.timeoutSeconds });
+      const body = `${t.stdout}\n${t.stderr}`;
+      const ok = t.status === 0 && /passing/.test(body) && !/failing|failed/.test(body.replace(/0 failing/g, ""));
+      perTest.push({ test: nm, ok, detail: tail(t) });
+      if (!ok) allOk = false;
+    }
+    gates.push({ gate: "test", ok: allOk, status: allOk ? "passed" : "failed", detail: perTest });
+    if (!allOk) return finish(provenance, gates, null, { quint: cfg.quintVersion, quintActual });
   } else {
-    gates.push({ gate: "test", ok: true, detail: "skipped by flag" });
+    gates.push({ gate: "test", ok: true, status: "skipped-by-flag", detail: "scenario tests skipped by --skip-test; verdict capped at PASS-WITHOUT-EXHAUSTIVE" });
   }
 
-  if (args.verify) {
-    if (args.invariants.length === 0 && args.temporals.length === 0) {
-      gates.push({ gate: "verify", ok: false, detail: "no invariants or temporal properties supplied; refusing vacuous pass" });
+  // ---- gate 5: verify (exhaustive; needs Java 21+) ----
+  if (!args.verify) {
+    gates.push({ gate: "verify", ok: true, status: "skipped-by-flag", detail: "exhaustive verification skipped by --skip-verify; correctness is tested, not proven" });
+  } else if (args.invariants.length === 0 && args.temporals.length === 0) {
+    gates.push({ gate: "verify", ok: false, status: "failed", detail: "no invariants or temporal properties supplied; refusing vacuous verify" });
+  } else {
+    const java = lib.detectJava();
+    provenance.java = java.versionLine;
+    const needMajor = Number(String(cfg.javaForVerify || ">=21").replace(/[^0-9]/g, "")) || 21;
+    if (!java.found || java.major === null || java.major < needMajor) {
+      gates.push({
+        gate: "verify", ok: true, status: "skipped-no-java21",
+        detail: `exhaustive verification requires Java >= ${needMajor} (Apalache); detected: ${java.versionLine || "none"}. Correctness is tested, not proven.`,
+      });
     } else {
       const vArgs = ["verify", modelAbs, "--max-steps", String(budgets.verify.maxSteps)];
       if (args.main) vArgs.push("--main", args.main);
       if (args.invariants.length) vArgs.push("--invariant", args.invariants.join(","));
       if (args.temporals.length) vArgs.push("--temporal", args.temporals.join(","));
       const v = lib.runQuintStage(bin, vArgs, { timeoutSeconds: budgets.verify.timeoutSeconds });
-      gates.push({ gate: "verify", ok: v.status === 0, detail: tail(v) });
+      const ok = v.status === 0;
+      gates.push({ gate: "verify", ok, status: ok ? "passed" : "failed", detail: tail(v) });
     }
-  } else {
-    gates.push({ gate: "verify", ok: true, detail: "skipped by flag" });
   }
 
-  return finish({ quint: cfg.quintVersion, quintActual: qv }, gates, null);
+  return finish(provenance, gates, null, { quint: cfg.quintVersion, quintActual });
 
-  function finish(quintInfo, gateList, setupError) {
+  function finish(prov, gateList, setupError, quintInfo) {
     const verdict = setupError ? "FAIL" : lib.gateVerdict(gateList);
     const record = {
       tool: "formal-verification/fv-run",
-      model: modelAbs,
-      main: args.main || null,
+      formatVersion: 2,
+      model: prov.model,
+      main: prov.main,
       startedAt,
       finishedAt: lib.nowIso(),
       quintExpected: quintInfo.quint,
       quintActual: quintInfo.quintActual,
       setupError,
+      provenance: prov,
       gates: gateList,
       verdict,
     };
     const out = args.out || path.join(repo, ".formal-verification", "evidence", `${stamp()}.json`);
     lib.writeJson(out, record);
-    console.log(JSON.stringify({ verdict, out, gates: gateList.map((g) => `${g.gate}:${g.ok ? "ok" : "FAIL"}`) }, null, 2));
-    process.exit(verdict === "PASS" ? 0 : 1);
+    console.log(JSON.stringify({
+      verdict, out,
+      gates: gateList.map((g) => `${g.gate}:${g.status}`),
+      honesty: verdict === "PASS"
+        ? "all gates including exhaustive verify passed within recorded bounds"
+        : verdict === "PASS-WITHOUT-EXHAUSTIVE"
+          ? "tested, not proven: exhaustive verification did not run (see verify gate detail)"
+          : "a gate failed or was vacuous; see gate details",
+    }, null, 2));
+    process.exit(verdict === "PASS" ? 0 : verdict === "PASS-WITHOUT-EXHAUSTIVE" ? 3 : setupError ? 2 : 1);
   }
 
   function tail(r) {

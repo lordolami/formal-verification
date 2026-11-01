@@ -1,0 +1,13 @@
+{
+  "formatVersion": 1,
+  "note": "Fictional filled record demonstrating fv-fault check semantics. Real records come from your staging runner with logs attached.",
+  "outcomes": [
+    { "case": "KV-CRASH", "fpoint": "F1", "postConditionObserved": true, "recoveryMs": 820, "detail": "kill-before-commit: no acked write lost" },
+    { "case": "KV-CRASH", "fpoint": "F2", "postConditionObserved": true, "recoveryMs": 910, "detail": "kill-after-commit-before-ack: write durable, client reconciled" },
+    { "case": "KV-CRASH", "fpoint": "F3", "postConditionObserved": true, "recoveryMs": 870, "detail": "kill-after-ack: write readable post-recovery" },
+    { "case": "JOB-DUP", "fpoint": "F4", "postConditionObserved": true, "recoveryMs": 120, "detail": "3x redelivery, one effect" },
+    { "case": "JOB-DUP", "fpoint": "F2", "postConditionObserved": true, "recoveryMs": 240, "detail": "kill between effect and ack; redelivery deduplicated" },
+    { "case": "BACKUP-CORRUPT", "fpoint": "F9", "postConditionObserved": true, "recoveryMs": 60, "detail": "restore refused naming entry todos/000123" },
+    { "case": "BACKUP-CORRUPT", "fpoint": "F8", "postConditionObserved": true, "recoveryMs": 60, "detail": "disk-full during stage: publish refused, live generation unchanged" }
+  ]
+}
