@@ -1,6 +1,6 @@
 {
   "formatVersion": 2,
-  "harnessVersion": "0.2.0",
+  "harnessVersion": "0.3.0",
   "quintNpm": "@informalsystems/quint",
   "quintVersion": "0.33.1",
   "nodeEngines": ">=20",

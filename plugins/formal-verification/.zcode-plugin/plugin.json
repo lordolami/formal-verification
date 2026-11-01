@@ -1,6 +1,6 @@
 {
   "name": "formal-verification",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Universal backend assurance harness powered by Quint: claim-graph modeling, simulation, bounded verification (resource-gated), mutation adequacy, live security probes, trace conformance, fault planning, discovery, scan fusion, coverage, assurance-case export, and self-qualification. No naked verdicts.",
   "author": {
     "name": "formal-verification"
